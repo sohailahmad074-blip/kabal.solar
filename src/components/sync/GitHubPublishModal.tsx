@@ -44,7 +44,7 @@ export const GitHubPublishModal: React.FC<GitHubPublishModalProps> = ({
   const isVercelHost = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app');
   const [activeTab, setActiveTab] = useState<'DIRECT' | 'COMMANDS' | 'DOWNLOAD'>(() => (isVercelHost ? 'DOWNLOAD' : 'DIRECT'));
   const [repoOwner, setRepoOwner] = useState('sohailahmad074-blip');
-  const [repoName, setRepoName] = useState('kabal-solar');
+  const [repoName, setRepoName] = useState('kabal.solar');
   const [personalAccessToken, setPersonalAccessToken] = useState(() => {
     try {
       return localStorage.getItem('solarcraft_github_pat') || '';
@@ -94,8 +94,8 @@ export const GitHubPublishModal: React.FC<GitHubPublishModalProps> = ({
         const data = await res.json();
         setGitStatus(data);
         if (data.remoteOrigin) {
-          // Try parsing existing remote origin
-          const match = data.remoteOrigin.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
+          // Parse remote origin cleanly supporting repo names with dots or hyphens
+          const match = data.remoteOrigin.match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/);
           if (match) {
             setRepoOwner(match[1]);
             setRepoName(match[2]);
