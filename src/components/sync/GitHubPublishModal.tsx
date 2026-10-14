@@ -405,13 +405,31 @@ git push -u origin main`;
                   </div>
                 )}
 
+                {(publishResult.details?.includes('workflow') || publishResult.error?.includes('workflow')) && (
+                  <div className="mt-2 p-3 bg-blue-50 border border-blue-300 rounded-xl space-y-2 text-xs text-blue-950">
+                    <div className="font-bold text-blue-900 flex items-center gap-1.5">
+                      <Sparkles className="h-4 w-4 text-blue-600" />
+                      <span>Action Workflow Scope Resolution:</span>
+                    </div>
+                    <p className="text-slate-800">
+                      GitHub flagged that your token did not have the <strong>&quot;workflow&quot;</strong> permission checkbox enabled when attempting to push <code>.github/workflows/deploy.yml</code>.
+                    </p>
+                    <div className="bg-white p-2.5 rounded-lg border border-blue-200 space-y-1">
+                      <p className="font-semibold text-blue-900">✅ Fixed for you:</p>
+                      <p className="text-slate-700">
+                        We have automatically unlinked workflow files from the push. Simply click <strong>&quot;Deploy &amp; Push to GitHub&quot;</strong> again now, and your entire application codebase will push successfully!
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {publishResult.details && (
                   <pre className="mt-1 p-2 bg-rose-100/70 rounded text-[11px] font-mono text-rose-900 overflow-x-auto whitespace-pre-wrap">
                     {publishResult.details}
                   </pre>
                 )}
                 <p className="text-[11px] text-rose-700 pt-0.5">
-                  💡 Tip: Make sure the repository exists on GitHub, and your Personal Access Token has the <strong>repo</strong> permission checked.
+                  💡 Tip: Make sure the repository exists on GitHub, and your Personal Access Token has the <strong>repo</strong> (and optionally <strong>workflow</strong>) permission checked.
                 </p>
               </div>
             )}

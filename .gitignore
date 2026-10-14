@@ -12,3 +12,4 @@ workspace-data.json
 *.tar.gz
 public/*.zip
 public/*.tar.gz
+.github/

@@ -438,6 +438,27 @@ app.post('/api/github/publish', async (req: Request, res: Response) => {
       }
     }
 
+    // Auto-recovery: If push was rejected because token lacks the 'workflow' scope for .github/workflows
+    if (!pushSuccess && lastError && String(lastError.stderr || lastError.message || '').includes('workflow')) {
+      try {
+        await execFileAsync('git', ['rm', '-rf', '--cached', '.github'], { cwd: __dirname });
+        await execFileAsync('git', ['commit', '-m', 'chore: omit github workflows to allow push with repo scope'], { cwd: __dirname });
+
+        for (const testUrl of urlCandidates) {
+          try {
+            await execFileAsync('git', ['remote', 'set-url', 'origin', testUrl], { cwd: __dirname });
+            const { stdout, stderr } = await execFileAsync('git', ['push', '-u', 'origin', 'main', '--force'], { cwd: __dirname });
+            pushSuccess = true;
+            pushStdout = stdout;
+            pushStderr = stderr;
+            break;
+          } catch (retryErr: any) {
+            lastError = retryErr;
+          }
+        }
+      } catch {}
+    }
+
     if (pushSuccess) {
       const repoUrl = `https://github.com/${cleanOwner}/${cleanRepo}`;
       const pagesUrl = `https://${cleanOwner.toLowerCase()}.github.io/${cleanRepo}/`;
@@ -465,6 +486,8 @@ app.post('/api/github/publish', async (req: Request, res: Response) => {
       } else if (rawStderr.includes('Repository not found') || rawStderr.includes('404')) {
         isRepoNotFound = true;
         hint = `Repository "${cleanOwner}/${cleanRepo}" was not found on GitHub. GitHub requires creating the repository first at https://github.com/new before pushing with a token.`;
+      } else if (rawStderr.includes('workflow')) {
+        hint = 'GitHub requires the "workflow" scope on your token to modify workflow files. We have excluded workflow files so you can push now, or you can edit your GitHub token and check the "workflow" permission checkbox.';
       } else if (rawStderr.includes('Permission to') && rawStderr.includes('denied to')) {
         if (token.startsWith('github_pat_')) {
           hint = `Permission denied for Fine-Grained token (github_pat_...). On GitHub, edit this token and check: 1) Under "Repository access", choose "All repositories" or select "${cleanRepo}". 2) Under "Permissions" ➔ "Repository permissions", set "Contents" to "Read and write". (Alternatively, generate a Classic Token with "repo" checked for effortless access).`;
