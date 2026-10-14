@@ -370,6 +370,38 @@ app.post('/api/github/publish', async (req: Request, res: Response) => {
       await execFileAsync('git', ['branch', '-M', 'main'], { cwd: __dirname });
     } catch {}
 
+    // Auto-attempt repository creation via GitHub API if token is provided
+    if (token) {
+      try {
+        const repoCheck = await fetch(`https://api.github.com/repos/${cleanOwner}/${cleanRepo}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github+json',
+            'User-Agent': 'SolarCraft-ERP-Applet',
+          },
+        });
+        if (repoCheck.status === 404) {
+          await fetch('https://api.github.com/user/repos', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Accept': 'application/vnd.github+json',
+              'Content-Type': 'application/json',
+              'User-Agent': 'SolarCraft-ERP-Applet',
+            },
+            body: JSON.stringify({
+              name: cleanRepo,
+              private: false,
+              description: 'SolarCraft ERP & Solar Quotation System',
+              auto_init: false,
+            }),
+          });
+        }
+      } catch {
+        // Continue to git push attempt
+      }
+    }
+
     // 6. Set remote origin URL candidate formats to try
     const urlCandidates: string[] = [];
     if (!token) {
@@ -426,11 +458,13 @@ app.post('/api/github/publish', async (req: Request, res: Response) => {
       const rawStderr = String(lastError?.stderr || lastError?.message || '');
       const safeError = rawStderr.replace(new RegExp(token, 'g'), '***');
 
+      let isRepoNotFound = false;
       let hint = 'Please check that the repository exists on GitHub and your token has "repo" permissions.';
       if (rawStderr.includes('Authentication failed') || rawStderr.includes('Invalid username or password') || rawStderr.includes('401')) {
         hint = 'GitHub authentication failed. Please double check that your Personal Access Token is correct and not expired.';
       } else if (rawStderr.includes('Repository not found') || rawStderr.includes('404')) {
-        hint = `Repository "${cleanOwner}/${cleanRepo}" was not found on GitHub. Please verify the repository exists under account "${cleanOwner}".`;
+        isRepoNotFound = true;
+        hint = `Repository "${cleanOwner}/${cleanRepo}" was not found on GitHub. GitHub requires creating the repository first at https://github.com/new before pushing with a token.`;
       } else if (rawStderr.includes('Permission to') && rawStderr.includes('denied to')) {
         if (token.startsWith('github_pat_')) {
           hint = `Permission denied for Fine-Grained token (github_pat_...). On GitHub, edit this token and check: 1) Under "Repository access", choose "All repositories" or select "${cleanRepo}". 2) Under "Permissions" ➔ "Repository permissions", set "Contents" to "Read and write". (Alternatively, generate a Classic Token with "repo" checked for effortless access).`;
@@ -441,6 +475,10 @@ app.post('/api/github/publish', async (req: Request, res: Response) => {
 
       return res.status(400).json({
         success: false,
+        repoNotFound: isRepoNotFound,
+        createRepoUrl: `https://github.com/new?name=${encodeURIComponent(cleanRepo)}&description=SolarCraft+ERP+System`,
+        cleanOwner,
+        cleanRepo,
         error: `Git Push Failed: ${hint}`,
         details: safeError,
       });

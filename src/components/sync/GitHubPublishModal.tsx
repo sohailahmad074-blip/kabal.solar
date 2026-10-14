@@ -70,6 +70,10 @@ export const GitHubPublishModal: React.FC<GitHubPublishModalProps> = ({
     message?: string;
     error?: string;
     details?: string;
+    repoNotFound?: boolean;
+    createRepoUrl?: string;
+    cleanOwner?: string;
+    cleanRepo?: string;
   } | null>(null);
 
   const [copiedCmd, setCopiedCmd] = useState(false);
@@ -362,18 +366,51 @@ git push -u origin main`;
             )}
 
             {publishResult && !publishResult.success && (
-              <div className="bg-rose-50 border border-rose-300 rounded-xl p-4 text-rose-950 space-y-1 animate-in fade-in duration-200">
+              <div className="bg-rose-50 border border-rose-300 rounded-xl p-4 text-rose-950 space-y-2 animate-in fade-in duration-200">
                 <div className="flex items-center gap-2 text-rose-800 font-bold text-sm">
                   <AlertCircle className="h-5 w-5 text-rose-600" />
-                  <span>Deployment Failed</span>
+                  <span>Deployment Notice: Repository Missing or Inaccessible</span>
                 </div>
-                <p className="text-xs text-rose-800">{publishResult.error}</p>
+                <p className="text-xs text-rose-900 font-medium">{publishResult.error}</p>
+
+                {(publishResult.repoNotFound || publishResult.error?.includes('not found') || publishResult.details?.includes('not found')) && (
+                  <div className="mt-2 p-3 bg-amber-50 border border-amber-300 rounded-xl space-y-2 text-xs text-amber-950">
+                    <div className="font-bold text-amber-900 flex items-center gap-1.5">
+                      <Sparkles className="h-4 w-4 text-amber-600" />
+                      <span>Quick 2-Step Fix to Publish:</span>
+                    </div>
+                    <ol className="list-decimal list-inside space-y-1.5 pl-1 text-slate-800">
+                      <li>
+                        Click the button below to create repository <strong>{repoName || 'kabal-solar'}</strong> under <strong>@{repoOwner || 'sohailahmad074-blip'}</strong> on GitHub:
+                        <div className="mt-1.5">
+                          <a
+                            href={publishResult.createRepoUrl || `https://github.com/new?name=${encodeURIComponent(repoName || 'kabal-solar')}&description=SolarCraft+ERP`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs shadow-xs"
+                          >
+                            <Github className="h-3.5 w-3.5" />
+                            <span>Create &quot;{repoName || 'kabal-solar'}&quot; on GitHub (1-Click)</span>
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                        <span className="text-[11px] text-slate-500 block mt-1">
+                          (Leave repository as Public, leave &quot;Add a README&quot; unchecked, and click &quot;Create repository&quot;)
+                        </span>
+                      </li>
+                      <li className="pt-1">
+                        Once created, come back here and click <strong>&quot;Deploy &amp; Push to GitHub&quot;</strong>!
+                      </li>
+                    </ol>
+                  </div>
+                )}
+
                 {publishResult.details && (
-                  <pre className="mt-2 p-2 bg-rose-100/70 rounded text-[11px] font-mono text-rose-900 overflow-x-auto whitespace-pre-wrap">
+                  <pre className="mt-1 p-2 bg-rose-100/70 rounded text-[11px] font-mono text-rose-900 overflow-x-auto whitespace-pre-wrap">
                     {publishResult.details}
                   </pre>
                 )}
-                <p className="text-[11px] text-rose-700 pt-1">
+                <p className="text-[11px] text-rose-700 pt-0.5">
                   💡 Tip: Make sure the repository exists on GitHub, and your Personal Access Token has the <strong>repo</strong> permission checked.
                 </p>
               </div>
