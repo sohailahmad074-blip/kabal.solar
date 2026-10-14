@@ -376,4 +376,15 @@ export interface ShopSettings {
 
   // Custom Product Categories
   customCategories?: string[];
+
+  // Sales Operator & Access
+  enableSalesOperator?: boolean;
+  salesOperatorName?: string;
+  salesOperatorPin?: string;
+
+  // Additional Bank Accounts
+  bankAccounts?: any[];
+
+  // Sync Timestamp
+  updatedAt?: string;
 }

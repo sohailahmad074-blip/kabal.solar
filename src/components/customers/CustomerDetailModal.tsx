@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Phone, 
   MapPin, 
@@ -15,7 +15,10 @@ import {
   ChevronDown,
   Tag,
   Copy,
-  Check
+  Check,
+  Package,
+  Layers,
+  FileSpreadsheet
 } from 'lucide-react';
 import { Customer, Invoice, ShopSettings, PaymentRequestMessageType } from '../../types/solar';
 import { Modal } from '../common/Modal';
@@ -54,6 +57,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   const [reminderMessageType, setReminderMessageType] = useState<PaymentRequestMessageType>('FRIENDLY');
   const [showReminderOptions, setShowReminderOptions] = useState<boolean>(false);
   const [reminderCustomNote, setReminderCustomNote] = useState<string>('');
+  const [historyViewMode, setHistoryViewMode] = useState<'DATE_WISE_LEDGER' | 'INVOICES'>('DATE_WISE_LEDGER');
 
   const customerInvoices = invoices.filter((i) => 
     i.customerId === customer.id ||
@@ -74,6 +78,99 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   const hasDue = balanceDue > 0;
   const pendingInvoices = actualInvoices.filter((i) => i.balanceDue > 0);
   const primaryPendingInvoice = pendingInvoices[0] || actualInvoices[0];
+
+  // Chronological Date-Wise Ledger (Invoices with products + Payments made date-wise)
+  const dateWiseLedger = useMemo(() => {
+    const list: Array<{
+      id: string;
+      date: string;
+      timestamp: number;
+      type: 'INVOICE' | 'PAYMENT' | 'QUOTATION';
+      docNumber: string;
+      title: string;
+      items?: any[];
+      referenceNo?: string;
+      paymentMethod?: string;
+      notes?: string;
+      debit: number;
+      credit: number;
+      discount?: number;
+      runningBalance: number;
+      invoiceObj?: Invoice;
+    }> = [];
+
+    customerInvoices.forEach((inv) => {
+      const isQuote = inv.type === 'QUOTATION';
+      list.push({
+        id: `inv-${inv.id}`,
+        date: inv.date,
+        timestamp: new Date(inv.date || 0).getTime(),
+        type: isQuote ? 'QUOTATION' : 'INVOICE',
+        docNumber: inv.invoiceNumber,
+        title: isQuote ? `Proposal #${inv.invoiceNumber}` : `Invoice #${inv.invoiceNumber}`,
+        items: inv.items || [],
+        debit: isQuote ? 0 : (Number(inv.grandTotal) || 0),
+        credit: 0,
+        runningBalance: 0,
+        invoiceObj: inv,
+      });
+
+      if (inv.payments && inv.payments.length > 0) {
+        inv.payments.forEach((p, idx) => {
+          list.push({
+            id: `pay-${inv.id}-${p.id || idx}`,
+            date: p.date || inv.date,
+            timestamp: new Date(p.date || inv.date || 0).getTime() + 1,
+            type: 'PAYMENT',
+            docNumber: p.referenceNo ? `REC-${p.referenceNo}` : `REC-#${inv.invoiceNumber}`,
+            referenceNo: p.referenceNo || (p as any).referenceNumber,
+            title: `Payment Received (Agst #${inv.invoiceNumber})`,
+            paymentMethod: p.method,
+            notes: p.notes,
+            debit: 0,
+            credit: Number(p.amount) || 0,
+            discount: Number(p.discount) || 0,
+            runningBalance: 0,
+            invoiceObj: inv,
+          });
+        });
+      } else if (!isQuote && (Number(inv.paidAmount) || 0) > 0) {
+        list.push({
+          id: `pay-init-${inv.id}`,
+          date: inv.date,
+          timestamp: new Date(inv.date || 0).getTime() + 1,
+          type: 'PAYMENT',
+          docNumber: `REC-#${inv.invoiceNumber}`,
+          title: `Initial Payment (#${inv.invoiceNumber})`,
+          paymentMethod: 'CASH',
+          notes: 'Advance / issuance payment',
+          debit: 0,
+          credit: Number(inv.paidAmount) || 0,
+          runningBalance: 0,
+          invoiceObj: inv,
+        });
+      }
+    });
+
+    list.sort((a, b) => {
+      if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+      if (a.type === 'INVOICE' && b.type === 'PAYMENT') return -1;
+      if (a.type === 'PAYMENT' && b.type === 'INVOICE') return 1;
+      return 0;
+    });
+
+    let bal = 0;
+    list.forEach((item) => {
+      if (item.type === 'INVOICE') {
+        bal += item.debit;
+      } else if (item.type === 'PAYMENT') {
+        bal -= (item.credit + (item.discount || 0));
+      }
+      item.runningBalance = bal;
+    });
+
+    return list;
+  }, [customerInvoices]);
 
   const handleSendWhatsAppReminder = () => {
     const targetPhone = customer.whatsapp || customer.phone || '';
@@ -433,113 +530,319 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
           </div>
         </div>
 
-        {/* Invoice & Proposal History for this Client */}
-        <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2.5 shadow-2xs">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-            <div className="flex items-center gap-1.5">
-              <FileText className="h-3.5 w-3.5 text-amber-500" />
-              <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
-                Billing & Document History ({customerInvoices.length})
-              </h4>
+        {/* Invoice & Date-Wise Ledger History for this Client */}
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-3 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <FileSpreadsheet className="h-4 w-4 text-amber-500" />
+              <div className="inline-flex rounded-lg bg-slate-100 p-0.5 border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setHistoryViewMode('DATE_WISE_LEDGER')}
+                  className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${
+                    historyViewMode === 'DATE_WISE_LEDGER'
+                      ? 'bg-white text-slate-900 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  📅 Date-Wise Ledger ({dateWiseLedger.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryViewMode('INVOICES')}
+                  className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${
+                    historyViewMode === 'INVOICES'
+                      ? 'bg-white text-slate-900 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  📄 Invoices & Products ({customerInvoices.length})
+                </button>
+              </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onOpenInvoiceEditor();
-              }}
-              className="flex items-center gap-1 rounded-lg bg-amber-400 px-2.5 py-1 text-xs font-bold text-slate-900 hover:bg-amber-500 transition-colors cursor-pointer"
-            >
-              <Plus className="h-3 w-3" />
-              <span>Create Document</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {onPrintCustomerStatement && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onPrintCustomerStatement(customer);
+                  }}
+                  className="flex items-center gap-1 rounded bg-amber-50 border border-amber-300 px-2 py-1 text-[11px] font-bold text-amber-900 hover:bg-amber-100 transition-colors cursor-pointer"
+                  title="Open full printable customer statement & ledger"
+                >
+                  <Printer className="h-3 w-3" />
+                  <span>Print Full Statement</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenInvoiceEditor();
+                }}
+                className="flex items-center gap-1 rounded-lg bg-amber-400 px-2.5 py-1 text-xs font-bold text-slate-900 hover:bg-amber-500 transition-colors cursor-pointer"
+              >
+                <Plus className="h-3 w-3" />
+                <span>Create Document</span>
+              </button>
+            </div>
           </div>
 
-          {customerInvoices.length === 0 ? (
-            <p className="text-[11px] text-slate-400 py-4 text-center">
-              No invoices or quotations logged yet for this client.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase bg-slate-50">
-                  <tr>
-                    <th className="py-2.5 px-2">Doc #</th>
-                    <th className="py-2.5 px-2">Type / Date</th>
-                    <th className="py-2.5 px-2 text-right">Total</th>
-                    <th className="py-2.5 px-2 text-right">Paid</th>
-                    <th className="py-2.5 px-2 text-right">Due</th>
-                    <th className="py-2.5 px-2 text-center">Status</th>
-                    <th className="py-2.5 px-2 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {customerInvoices.map((inv) => (
-                    <tr key={inv.id} className="hover:bg-slate-50/80">
-                      <td className="py-2 px-2 font-bold text-slate-900 font-mono">{inv.invoiceNumber}</td>
-                      <td className="py-2 px-2">
-                        <span className="text-[10px] text-slate-500">{inv.type} • {formatDate(inv.date)}</span>
-                      </td>
-                      <td className="py-2 px-2 text-right font-semibold text-slate-900">
-                        {formatCurrency(inv.grandTotal, settings.currency, settings.currencyPosition)}
-                      </td>
-                      <td className="py-2 px-2 text-right font-medium text-emerald-700">
-                        {formatCurrency(inv.paidAmount, settings.currency, settings.currencyPosition)}
-                      </td>
-                      <td className="py-2 px-2 text-right font-medium text-rose-600">
-                        {formatCurrency(inv.balanceDue, settings.currency, settings.currencyPosition)}
-                      </td>
-                      <td className="py-2 px-2 text-center">
-                        <Badge status={inv.status} size="sm" />
-                      </td>
-                      <td className="py-2 px-2 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {inv.balanceDue > 0 && onOpenRecordPayment && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onClose();
-                                onOpenRecordPayment(inv);
-                              }}
-                              className="rounded bg-emerald-50 border border-emerald-300 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 hover:bg-emerald-100 flex items-center gap-0.5 cursor-pointer"
-                              title="Receive Payment & Grant Discount"
-                            >
-                              <DollarSign className="h-3 w-3 text-emerald-600" />
-                              <span>Receive</span>
-                            </button>
-                          )}
-                          {onSendInvoice && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onClose();
-                                onSendInvoice(inv);
-                              }}
-                              className="rounded p-1 text-emerald-600 hover:bg-emerald-50"
-                              title="Send to Customer"
-                            >
-                              <Send className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onClose();
-                              onViewInvoice(inv);
-                            }}
-                            className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                            title="View / Print Document"
-                          >
-                            <Printer className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </td>
+          {/* VIEW 1: DATE-WISE LEDGER (INVOICES WITH PRODUCTS & PAYMENTS MADE DATE-WISE) */}
+          {historyViewMode === 'DATE_WISE_LEDGER' && (
+            dateWiseLedger.length === 0 ? (
+              <p className="text-[11px] text-slate-400 py-4 text-center">
+                No ledger transactions recorded yet for this client.
+              </p>
+            ) : (
+              <div className="overflow-x-auto max-h-96">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase bg-slate-50 sticky top-0 z-10">
+                    <tr>
+                      <th className="py-2 px-2">Date</th>
+                      <th className="py-2 px-2">Doc / Ref #</th>
+                      <th className="py-2 px-2">Type</th>
+                      <th className="py-2 px-2">Products / Payment Particulars</th>
+                      <th className="py-2 px-2 text-right">Debit (Billed)</th>
+                      <th className="py-2 px-2 text-right">Credit (Paid)</th>
+                      <th className="py-2 px-2 text-right">Balance</th>
+                      <th className="py-2 px-2 text-right">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {dateWiseLedger.map((row) => {
+                      const isInvoice = row.type === 'INVOICE';
+                      const isPayment = row.type === 'PAYMENT';
+                      const isQuote = row.type === 'QUOTATION';
+
+                      return (
+                        <tr
+                          key={row.id}
+                          className={`transition-colors ${
+                            isPayment ? 'bg-emerald-50/20 hover:bg-emerald-50/50' : 'hover:bg-slate-50/80'
+                          }`}
+                        >
+                          <td className="py-2 px-2 font-medium text-slate-700 whitespace-nowrap align-top">
+                            {formatDate(row.date)}
+                          </td>
+                          <td className="py-2 px-2 font-mono font-bold text-slate-900 align-top">
+                            {row.docNumber}
+                            {row.referenceNo && row.referenceNo !== row.docNumber && (
+                              <span className="block text-[9px] text-slate-500 font-normal">
+                                Ref: {row.referenceNo}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 px-2 align-top">
+                            <span
+                              className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                                isPayment
+                                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                                  : isQuote
+                                  ? 'bg-blue-100 text-blue-900 border border-blue-200'
+                                  : 'bg-slate-100 text-slate-800 border border-slate-200'
+                              }`}
+                            >
+                              {row.type}
+                            </span>
+                          </td>
+                          <td className="py-2 px-2 align-top">
+                            {(isInvoice || isQuote) && (
+                              <div className="space-y-0.5 max-w-sm">
+                                {row.items && row.items.length > 0 ? (
+                                  row.items.map((it, idx) => (
+                                    <div key={it.id || idx} className="text-[10px] text-slate-700 flex items-center justify-between gap-1">
+                                      <span className="truncate">
+                                        <strong className="text-amber-800 mr-1">{it.quantity} {it.unit || 'x'}</strong>
+                                        {it.description}
+                                      </span>
+                                      <span className="font-mono text-slate-500 shrink-0 text-[9px]">
+                                        {formatCurrency(it.total, settings.currency, settings.currencyPosition)}
+                                      </span>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <span className="text-slate-400 text-[10px] italic">General services/settlement</span>
+                                )}
+                              </div>
+                            )}
+
+                            {isPayment && (
+                              <div className="text-[11px] text-emerald-800 space-y-0.5">
+                                <p className="font-semibold flex items-center gap-1">
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                                  <span>Payment via {row.paymentMethod?.replace(/_/g, ' ') || 'Cash'}</span>
+                                </p>
+                                {row.notes && <p className="text-[10px] text-slate-500 italic">&ldquo;{row.notes}&rdquo;</p>}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-2 px-2 text-right font-mono font-bold align-top text-slate-900 whitespace-nowrap">
+                            {row.debit > 0 ? `+${formatCurrency(row.debit, settings.currency, settings.currencyPosition)}` : '—'}
+                          </td>
+                          <td className="py-2 px-2 text-right font-mono font-bold align-top text-emerald-700 whitespace-nowrap">
+                            {row.credit > 0 ? `-${formatCurrency(row.credit, settings.currency, settings.currencyPosition)}` : '—'}
+                          </td>
+                          <td className="py-2 px-2 text-right font-mono font-black align-top whitespace-nowrap">
+                            {isQuote ? (
+                              <span className="text-slate-400 font-normal text-[10px]">—</span>
+                            ) : (
+                              <span className={row.runningBalance > 0 ? 'text-rose-600' : 'text-emerald-600'}>
+                                {formatCurrency(row.runningBalance, settings.currency, settings.currencyPosition)}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 px-2 text-right align-top">
+                            {row.invoiceObj && (
+                              <div className="flex items-center justify-end gap-1">
+                                {row.invoiceObj.balanceDue > 0 && onOpenRecordPayment && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onClose();
+                                      onOpenRecordPayment(row.invoiceObj!);
+                                    }}
+                                    className="rounded bg-emerald-50 border border-emerald-300 px-1 py-0.5 text-[9px] font-bold text-emerald-800 hover:bg-emerald-100 flex items-center gap-0.5 cursor-pointer"
+                                    title="Receive Payment"
+                                  >
+                                    <DollarSign className="h-2.5 w-2.5 text-emerald-600" />
+                                    <span>Pay</span>
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onClose();
+                                    onViewInvoice(row.invoiceObj!);
+                                  }}
+                                  className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                                  title="View Document"
+                                >
+                                  <Printer className="h-3 w-3" />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
+          )}
+
+          {/* VIEW 2: INVOICES WITH ITEMIZED PRODUCTS */}
+          {historyViewMode === 'INVOICES' && (
+            customerInvoices.length === 0 ? (
+              <p className="text-[11px] text-slate-400 py-4 text-center">
+                No invoices or quotations logged yet for this client.
+              </p>
+            ) : (
+              <div className="overflow-x-auto max-h-96">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase bg-slate-50 sticky top-0 z-10">
+                    <tr>
+                      <th className="py-2.5 px-2">Doc #</th>
+                      <th className="py-2.5 px-2">Type / Date</th>
+                      <th className="py-2.5 px-2">Products of Invoice</th>
+                      <th className="py-2.5 px-2 text-right">Total</th>
+                      <th className="py-2.5 px-2 text-right">Paid</th>
+                      <th className="py-2.5 px-2 text-right">Due</th>
+                      <th className="py-2.5 px-2 text-center">Status</th>
+                      <th className="py-2.5 px-2 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {customerInvoices.map((inv) => (
+                      <tr key={inv.id} className="hover:bg-slate-50/80">
+                        <td className="py-2 px-2 font-bold text-slate-900 font-mono align-top">{inv.invoiceNumber}</td>
+                        <td className="py-2 px-2 align-top">
+                          <span className="text-[10px] text-slate-500">{inv.type} • {formatDate(inv.date)}</span>
+                        </td>
+                        {/* Products of Invoice */}
+                        <td className="py-2 px-2 align-top">
+                          <div className="space-y-0.5 max-w-xs">
+                            {inv.items && inv.items.length > 0 ? (
+                              inv.items.map((item, idx) => (
+                                <div key={item.id || idx} className="text-[10px] text-slate-700 flex items-center justify-between gap-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                                  <span className="truncate">
+                                    <strong className="text-amber-800 mr-1">{item.quantity} {item.unit || 'x'}</strong>
+                                    {item.description}
+                                  </span>
+                                  <span className="font-mono text-slate-500 text-[9px] shrink-0">
+                                    {formatCurrency(item.total, settings.currency, settings.currencyPosition)}
+                                  </span>
+                                </div>
+                              ))
+                            ) : (
+                              <span className="text-slate-400 italic text-[10px]">No item details</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-2 px-2 text-right font-semibold text-slate-900 align-top">
+                          {formatCurrency(inv.grandTotal, settings.currency, settings.currencyPosition)}
+                        </td>
+                        <td className="py-2 px-2 text-right font-medium text-emerald-700 align-top">
+                          {formatCurrency(inv.paidAmount, settings.currency, settings.currencyPosition)}
+                        </td>
+                        <td className="py-2 px-2 text-right font-medium text-rose-600 align-top">
+                          {formatCurrency(inv.balanceDue, settings.currency, settings.currencyPosition)}
+                        </td>
+                        <td className="py-2 px-2 text-center align-top">
+                          <Badge status={inv.status} size="sm" />
+                        </td>
+                        <td className="py-2 px-2 text-right align-top">
+                          <div className="flex items-center justify-end gap-1">
+                            {inv.balanceDue > 0 && onOpenRecordPayment && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onClose();
+                                  onOpenRecordPayment(inv);
+                                }}
+                                className="rounded bg-emerald-50 border border-emerald-300 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 hover:bg-emerald-100 flex items-center gap-0.5 cursor-pointer"
+                                title="Receive Payment & Grant Discount"
+                              >
+                                <DollarSign className="h-3 w-3 text-emerald-600" />
+                                <span>Receive</span>
+                              </button>
+                            )}
+                            {onSendInvoice && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onClose();
+                                  onSendInvoice(inv);
+                                }}
+                                className="rounded p-1 text-emerald-600 hover:bg-emerald-50"
+                                title="Send to Customer"
+                              >
+                                <Send className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onClose();
+                                onViewInvoice(inv);
+                              }}
+                              className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                              title="View / Print Document"
+                            >
+                              <Printer className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
           )}
         </div>
 

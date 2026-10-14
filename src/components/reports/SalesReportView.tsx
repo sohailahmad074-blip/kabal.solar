@@ -1712,11 +1712,11 @@ export const SalesReportView: React.FC<SalesReportViewProps> = ({
                                   <table className="w-full text-left text-xs">
                                     <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500">
                                       <tr>
-                                        <th className="py-1.5 px-2">Invoice #</th>
+                                        <th className="py-1.5 px-2">Invoice # & Products</th>
                                         <th className="py-1.5 px-2">Date</th>
                                         <th className="py-1.5 px-2">Solar Capacity</th>
                                         <th className="py-1.5 px-2 text-right">Invoice Total</th>
-                                        <th className="py-1.5 px-2 text-right">Paid</th>
+                                        <th className="py-1.5 px-2 text-right">Paid (Receipts)</th>
                                         <th className="py-1.5 px-2 text-right">Due Balance</th>
                                         <th className="py-1.5 px-2 text-center">Status</th>
                                         <th className="py-1.5 px-2 text-right print:hidden">Action</th>
@@ -1725,30 +1725,57 @@ export const SalesReportView: React.FC<SalesReportViewProps> = ({
                                     <tbody className="divide-y divide-slate-100">
                                       {c.invoices.map((inv) => (
                                         <tr key={inv.id} className="hover:bg-slate-50">
-                                          <td className="py-1.5 px-2 font-mono font-bold text-slate-900">
-                                            {inv.invoiceNumber}
+                                          <td className="py-2 px-2 align-top">
+                                            <span className="font-mono font-bold text-slate-900 block">{inv.invoiceNumber}</span>
+                                            {/* Products of Invoice */}
+                                            {inv.items && inv.items.length > 0 && (
+                                              <div className="mt-1 space-y-0.5 max-w-xs">
+                                                {inv.items.map((it, idx) => (
+                                                  <div key={it.id || idx} className="text-[10px] text-slate-600 flex items-center justify-between gap-1 bg-slate-50 px-1 py-0.5 rounded border border-slate-100">
+                                                    <span className="truncate">
+                                                      <strong className="text-amber-800 mr-1">{it.quantity} {it.unit || 'x'}</strong>
+                                                      {it.description}
+                                                    </span>
+                                                    <span className="font-mono text-slate-500 shrink-0 text-[9px]">
+                                                      {formatCurrency(it.total, settings.currency, settings.currencyPosition)}
+                                                    </span>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
                                           </td>
-                                          <td className="py-1.5 px-2 text-slate-600">
+                                          <td className="py-2 px-2 text-slate-600 align-top whitespace-nowrap">
                                             {formatDate(inv.date)}
                                           </td>
-                                          <td className="py-1.5 px-2 font-semibold text-blue-600">
+                                          <td className="py-2 px-2 font-semibold text-blue-600 align-top">
                                             {inv.projectSystemCapacityKw ? `${inv.projectSystemCapacityKw} kW` : '-'}
                                           </td>
-                                          <td className="py-1.5 px-2 text-right font-mono font-bold text-slate-900">
+                                          <td className="py-2 px-2 text-right font-mono font-bold text-slate-900 align-top">
                                             {formatCurrency(inv.grandTotal, settings.currency, settings.currencyPosition)}
                                           </td>
-                                          <td className="py-1.5 px-2 text-right font-mono font-semibold text-emerald-600">
-                                            {formatCurrency(inv.paidAmount, settings.currency, settings.currencyPosition)}
+                                          <td className="py-2 px-2 text-right font-mono font-semibold text-emerald-600 align-top">
+                                            <div>{formatCurrency(inv.paidAmount, settings.currency, settings.currencyPosition)}</div>
+                                            {/* Payments Made Date-Wise */}
+                                            {inv.payments && inv.payments.length > 0 && (
+                                              <div className="mt-1 space-y-0.5 text-[9px] text-emerald-800 text-right">
+                                                {inv.payments.map((p, pIdx) => (
+                                                  <div key={p.id || pIdx} className="bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100">
+                                                    <span>{formatDate(p.date)}: <strong>{formatCurrency(p.amount, settings.currency, settings.currencyPosition)}</strong></span>
+                                                    <span className="text-slate-500 block">({p.method.replace(/_/g, ' ')})</span>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
                                           </td>
-                                          <td className="py-1.5 px-2 text-right font-mono font-semibold text-rose-600">
+                                          <td className="py-2 px-2 text-right font-mono font-semibold text-rose-600 align-top">
                                             {formatCurrency(inv.balanceDue, settings.currency, settings.currencyPosition)}
                                           </td>
-                                          <td className="py-1.5 px-2 text-center">
+                                          <td className="py-2 px-2 text-center align-top">
                                             <Badge variant={inv.status === 'PAID' ? 'success' : inv.status === 'PARTIAL' ? 'warning' : 'danger'}>
                                               {inv.status}
                                             </Badge>
                                           </td>
-                                          <td className="py-1.5 px-2 text-right print:hidden">
+                                          <td className="py-2 px-2 text-right print:hidden align-top">
                                             <button
                                               type="button"
                                               onClick={() => onViewInvoice && onViewInvoice(inv)}
