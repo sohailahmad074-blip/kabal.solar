@@ -129,10 +129,28 @@ export const computeDataSignature = (data: Partial<CloudWorkspacePayload>): stri
     const movCount = data.stockMovements?.length || 0;
     const movFirstId = data.stockMovements?.[0]?.id || '';
 
-    const settingsName = data.settings?.shopName || '';
-    const settingsPhone = data.settings?.phone || '';
+    const setSig = data.settings
+      ? [
+          data.settings.shopName || '',
+          data.settings.phone || '',
+          data.settings.ownerPin || '',
+          data.settings.partnerPin || '',
+          data.settings.salesOperatorPin || '',
+          data.settings.city || '',
+          data.settings.address || '',
+          data.settings.email || '',
+          data.settings.tagline || '',
+          data.settings.taxRegistrationNumber || '',
+          data.settings.currency || '',
+          data.settings.defaultTaxRate || 0,
+          data.settings.updatedAt || '',
+          (data.settings.customCategories || []).join(','),
+          (data.settings.bankAccounts || []).map((b: any) => `${b.bankName}:${b.accountNumber}`).join(','),
+          data.settings.termsAndConditions?.length || 0
+        ].join('^')
+      : '';
 
-    return `inv:${invCount}_${invGrandTotalSum}_${invPaidTotalSum}_${invBalanceDueSum}_${invPaymentsCount}_${invTotalItemsCount}_${invItemsSummaryHash}_${invAllUpdatedHash}|cust:${custCount}_${custPaidSum}_${custBalanceSum}|prod:${prodCount}_${prodStockSum}|exp:${expCount}_${expTotalSum}|po:${poCount}_${poTotalSum}_${poReceivedCount}|sup:${supCount}_${supBalanceSum}|mov:${movCount}_${movFirstId}|set:${settingsName}_${settingsPhone}`;
+    return `inv:${invCount}_${invGrandTotalSum}_${invPaidTotalSum}_${invBalanceDueSum}_${invPaymentsCount}_${invTotalItemsCount}_${invItemsSummaryHash}_${invAllUpdatedHash}|cust:${custCount}_${custPaidSum}_${custBalanceSum}|prod:${prodCount}_${prodStockSum}|exp:${expCount}_${expTotalSum}|po:${poCount}_${poTotalSum}_${poReceivedCount}|sup:${supCount}_${supBalanceSum}|mov:${movCount}_${movFirstId}|set:${setSig}`;
   } catch {
     return String(Date.now());
   }

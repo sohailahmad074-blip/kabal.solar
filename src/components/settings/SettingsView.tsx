@@ -63,13 +63,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const [formData, setFormData] = useState<ShopSettings>(() => safeInitialSettings);
+  const [isFormDirty, setIsFormDirty] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [copiedPartnerLink, setCopiedPartnerLink] = useState(false);
   const [newCategoryInput, setNewCategoryInput] = useState('');
 
-  // Keep form data in sync if settings update from external changes or cloud
+  // Keep form data in sync if settings update from external changes or cloud,
+  // but NEVER overwrite while the user is actively editing (isFormDirty)!
   useEffect(() => {
-    if (settings) {
+    if (settings && !isFormDirty) {
       setFormData((prev) => ({
         ...defaultSettings,
         ...prev,
@@ -79,18 +81,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           : (prev.customCategories || defaultSettings.customCategories || []),
       }));
     }
-  }, [settings]);
+  }, [settings, isFormDirty]);
 
   const partnerLink = typeof window !== 'undefined' && window.location
     ? `${window.location.origin}${window.location.pathname}?role=partner`
     : '';
 
   const handleChange = (field: keyof ShopSettings, value: any) => {
+    setIsFormDirty(true);
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    setIsFormDirty(false);
     onSaveSettings(formData);
     setSaveMessage('Solar Shop settings saved successfully!');
     setTimeout(() => setSaveMessage(''), 3000);

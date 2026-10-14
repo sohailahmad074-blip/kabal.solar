@@ -270,11 +270,13 @@ export function App() {
   const lastSyncedSignatureRef = useRef<string>('');
   const invoicesRef = useRef(invoices);
   const customersRef = useRef(customers);
+  const settingsRef = useRef(settings);
 
   useEffect(() => {
     invoicesRef.current = invoices;
     customersRef.current = customers;
-  }, [invoices, customers]);
+    settingsRef.current = settings;
+  }, [invoices, customers, settings]);
 
   // Subscribe to High-Speed Server Live Stream + Cloud Database for continuous 1-second sync
   useEffect(() => {
@@ -286,7 +288,14 @@ export function App() {
         lastSyncedSignatureRef.current = sig;
         setLastAppliedHash(sig);
 
-        if (cloudData.settings) setSettings(cloudData.settings);
+        if (cloudData.settings) {
+          const localUpdated = new Date(settingsRef.current?.updatedAt || 0).getTime();
+          const remoteUpdated = new Date(cloudData.settings.updatedAt || 0).getTime();
+          if (remoteUpdated >= localUpdated) {
+            setSettings(cloudData.settings);
+            saveShopSettings(cloudData.settings);
+          }
+        }
         if (cloudData.products) setProducts(cloudData.products);
         if (cloudData.customers || cloudData.invoices) {
           const mergedInvs = cloudData.invoices
@@ -352,9 +361,14 @@ export function App() {
         if (state && (state.invoices?.length || state.products?.length || state.customers?.length)) {
           const cloudSig = computeDataSignature(state);
           if (cloudSig !== currentSig) {
-            lastSyncedSignatureRef.current = cloudSig;
-            setLastAppliedHash(cloudSig);
-            if (state.settings) setSettings(state.settings);
+            if (state.settings) {
+              const localUpdated = new Date(settingsRef.current?.updatedAt || 0).getTime();
+              const remoteUpdated = new Date(state.settings.updatedAt || 0).getTime();
+              if (remoteUpdated >= localUpdated) {
+                setSettings(state.settings);
+                saveShopSettings(state.settings);
+              }
+            }
             if (state.products) setProducts(state.products);
             if (state.customers || state.invoices) {
               const mergedInvs = state.invoices
@@ -434,7 +448,14 @@ export function App() {
       lastSyncedSignatureRef.current = sig;
       setLastAppliedHash(sig);
 
-      if (cloudData.settings) setSettings(cloudData.settings);
+      if (cloudData.settings) {
+        const localUpdated = new Date(settingsRef.current?.updatedAt || 0).getTime();
+        const remoteUpdated = new Date(cloudData.settings.updatedAt || 0).getTime();
+        if (remoteUpdated >= localUpdated) {
+          setSettings(cloudData.settings);
+          saveShopSettings(cloudData.settings);
+        }
+      }
       if (cloudData.products) setProducts(cloudData.products);
       if (cloudData.customers || cloudData.invoices) {
         const incomingCusts = cloudData.customers || customers;
@@ -457,6 +478,38 @@ export function App() {
     }
     setSyncStatus('live_1s');
     return false;
+  };
+
+  // Immediate and authoritative save handler for Shop Settings
+  const handleSaveSettings = async (newSettings: ShopSettings) => {
+    const updatedSettings: ShopSettings = {
+      ...newSettings,
+      updatedAt: new Date().toISOString(),
+    };
+    settingsRef.current = updatedSettings;
+    setSettings(updatedSettings);
+    saveShopSettings(updatedSettings);
+
+    const payload = {
+      settings: updatedSettings,
+      products,
+      customers,
+      invoices,
+      purchaseOrders,
+      expenses,
+      suppliers,
+      stockMovements,
+    };
+
+    const sig = computeDataSignature(payload);
+    lastSyncedSignatureRef.current = sig;
+    setLastAppliedHash(sig);
+
+    broadcastLocalState(payload);
+    pushToServerRelay(payload).catch(() => {});
+    await pushFullStateToCloud(payload, true);
+    setLastSyncTime(new Date());
+    setSyncStatus('live_1s');
   };
 
   // Global Secret Shortcut listener (Ctrl+Shift+P / Cmd+Shift+P / Alt+P)
@@ -1577,7 +1630,7 @@ export function App() {
               {activeTab === 'SETTINGS' && (
                 <SettingsView
                   settings={settings}
-                  onSaveSettings={(newSettings) => setSettings(newSettings)}
+                  onSaveSettings={handleSaveSettings}
                   onResetData={handleResetData}
                   allAppData={allAppData}
                   onImportData={handleImportData}
@@ -1599,7 +1652,7 @@ export function App() {
         isOpen={isShopSettingsModalOpen}
         onClose={() => setIsShopSettingsModalOpen(false)}
         settings={settings}
-        onSaveSettings={(newSettings) => setSettings(newSettings)}
+        onSaveSettings={handleSaveSettings}
         onResetData={handleResetData}
         allAppData={allAppData}
         onImportData={handleImportData}
@@ -1745,7 +1798,7 @@ export function App() {
         existingProduct={editingProduct}
         prefillCode={productEditorPrefillCode}
         settings={settings}
-        onUpdateSettings={(newSettings) => setSettings(newSettings)}
+        onUpdateSettings={handleSaveSettings}
         currentRole={currentRole}
       />
 
@@ -1808,7 +1861,7 @@ export function App() {
         products={products}
         expenses={expenses}
         settings={settings}
-        onUpdateSettings={setSettings}
+        onUpdateSettings={handleSaveSettings}
       />
 
       {/* Real-time Firebase Cloud Sync & Multi-Device Mobile Portal */}
