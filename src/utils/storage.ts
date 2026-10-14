@@ -1277,8 +1277,15 @@ export const saveCustomers = (customers: Customer[]): void => {
 
 export const loadInvoices = (): Invoice[] => {
   try {
+    let deletedIds = new Set<string>();
+    const rawDel = localStorage.getItem('solarcraft_deleted_invoice_ids');
+    if (rawDel) {
+      const arr = JSON.parse(rawDel);
+      if (Array.isArray(arr)) deletedIds = new Set(arr);
+    }
     const data = localStorage.getItem(INVOICES_KEY);
-    return data ? JSON.parse(data) : defaultInvoices;
+    const list: Invoice[] = data ? JSON.parse(data) : defaultInvoices;
+    return list.filter((i) => !deletedIds.has(i.id));
   } catch {
     return defaultInvoices;
   }

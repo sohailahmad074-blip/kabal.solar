@@ -21,7 +21,9 @@ import {
   Layers,
   ShieldCheck,
   Github,
-  Lock
+  Lock,
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import { ShopSettings, UserRole } from '../../types/solar';
 import { getAllCategories, DEFAULT_CATEGORY_LABELS } from '../../utils/categories';
@@ -130,6 +132,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setTimeout(() => setSaveMessage(''), 3000);
   };
 
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [backupStatus, setBackupStatus] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
   const handleExportBackup = () => {
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(allAppData, null, 2));
     const downloadAnchor = document.createElement('a');
@@ -147,22 +152,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       fileReader.onload = (event) => {
         try {
           const parsed = JSON.parse(event.target?.result as string);
-          if (window.confirm('Are you sure you want to restore this backup? This will replace your current data.')) {
-            onImportData(parsed);
-            alert('Backup data restored successfully!');
-          }
-        } catch (err) {
-          alert('Invalid backup file. Please provide a valid SolarCraft JSON backup.');
+          onImportData(parsed);
+          setBackupStatus({ text: 'Backup data restored successfully!', type: 'success' });
+          setTimeout(() => setBackupStatus(null), 4000);
+        } catch {
+          setBackupStatus({ text: 'Invalid backup file. Please provide a valid SolarCraft JSON backup.', type: 'error' });
+          setTimeout(() => setBackupStatus(null), 4000);
         }
       };
     }
   };
 
   const handleReset = () => {
-    if (window.confirm('Reset all invoices, purchasing, customers, and expenses back to default demo solar records?')) {
-      onResetData();
-      alert('Data reset to sample solar records.');
-    }
+    setShowResetConfirm(true);
+  };
+
+  const confirmReset = () => {
+    onResetData();
+    setShowResetConfirm(false);
+    setBackupStatus({ text: 'Data reset to sample solar records.', type: 'success' });
+    setTimeout(() => setBackupStatus(null), 4000);
   };
 
   return (
@@ -746,6 +755,64 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Reset Confirmation Modal */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-4">
+              <div className="rounded-full bg-rose-100 p-3 text-rose-600 shrink-0">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Reset All Records to Demo?
+                  </h3>
+                  <button
+                    onClick={() => setShowResetConfirm(false)}
+                    className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <p className="mt-3 text-xs text-slate-600 leading-relaxed">
+                  This will reset all invoices, customers, purchase orders, products, and expenses back to initial clean demo records.
+                </p>
+
+                <div className="mt-6 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowResetConfirm(false)}
+                    className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmReset}
+                    className="flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-rose-700 active:scale-95 transition-all"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Yes, Reset Everything
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Status Notification Toast */}
+      {backupStatus && (
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl px-4 py-3 text-xs font-semibold text-white shadow-lg animate-in slide-in-from-bottom-5 ${
+          backupStatus.type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'
+        }`}>
+          <CheckCircle2 className="h-4 w-4" />
+          <span>{backupStatus.text}</span>
+        </div>
+      )}
     </div>
   );
 };

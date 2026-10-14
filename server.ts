@@ -130,6 +130,14 @@ app.post('/api/sync/push', (req: Request, res: Response) => {
     updatedByDevice,
   };
 
+  // If explicitly deleted invoice IDs were provided, purge them
+  if (Array.isArray(body.deletedInvoiceIds) && body.deletedInvoiceIds.length > 0) {
+    const delSet = new Set(body.deletedInvoiceIds);
+    if (activeWorkspace.invoices) {
+      activeWorkspace.invoices = activeWorkspace.invoices.filter((i: any) => !delSet.has(i.id));
+    }
+  }
+
   // Async save to disk for durability
   try {
     fs.writeFile(DATA_FILE, JSON.stringify(activeWorkspace), () => {});
@@ -149,6 +157,39 @@ app.post('/api/sync/push', (req: Request, res: Response) => {
     success: true,
     revision: incomingRevision,
     updatedAt,
+  });
+});
+
+// 2b. Direct Invoice Deletion Endpoint
+app.delete('/api/invoices/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const incomingRevision = (activeWorkspace.revision || 0) + 1;
+  const updatedAt = new Date().toISOString();
+
+  if (activeWorkspace.invoices) {
+    activeWorkspace.invoices = activeWorkspace.invoices.filter((i: any) => i.id !== id);
+  }
+
+  activeWorkspace.revision = incomingRevision;
+  activeWorkspace.updatedAt = updatedAt;
+
+  try {
+    fs.writeFile(DATA_FILE, JSON.stringify(activeWorkspace), () => {});
+  } catch (err) {
+    console.warn('Could not persist deletion to workspace-data.json:', err);
+  }
+
+  broadcastToClients({
+    workspace: activeWorkspace,
+    revision: incomingRevision,
+    updatedAt,
+    updatedByDevice: 'server-delete',
+  }, 'sync_update');
+
+  return res.json({
+    success: true,
+    deletedId: id,
+    revision: incomingRevision,
   });
 });
 
@@ -330,9 +371,14 @@ app.post('/api/github/publish', async (req: Request, res: Response) => {
     } catch {}
 
     // 6. Set remote origin URL
-    const authenticatedUrl = token
-      ? `https://${encodeURIComponent(cleanOwner)}:${encodeURIComponent(token)}@github.com/${cleanOwner}/${cleanRepo}.git`
-      : `https://github.com/${cleanOwner}/${cleanRepo}.git`;
+    let authenticatedUrl: string;
+    if (!token) {
+      authenticatedUrl = `https://github.com/${cleanOwner}/${cleanRepo}.git`;
+    } else if (token.startsWith('github_pat_')) {
+      authenticatedUrl = `https://x-access-token:${encodeURIComponent(token)}@github.com/${cleanOwner}/${cleanRepo}.git`;
+    } else {
+      authenticatedUrl = `https://${encodeURIComponent(cleanOwner)}:${encodeURIComponent(token)}@github.com/${cleanOwner}/${cleanRepo}.git`;
+    }
 
     try {
       await execFileAsync('git', ['remote', 'remove', 'origin'], { cwd: __dirname });
@@ -362,10 +408,21 @@ app.post('/api/github/publish', async (req: Request, res: Response) => {
         output: (stdout + ' ' + stderr).replace(new RegExp(token, 'g'), '***'),
       });
     } catch (pushErr: any) {
-      const safeError = String(pushErr.stderr || pushErr.message || '').replace(new RegExp(token, 'g'), '***');
+      const rawStderr = String(pushErr.stderr || pushErr.message || '');
+      const safeError = rawStderr.replace(new RegExp(token, 'g'), '***');
+      
+      let hint = 'Please check that the repository exists on GitHub and your token has "repo" permissions.';
+      if (rawStderr.includes('Authentication failed') || rawStderr.includes('Invalid username or password') || rawStderr.includes('401')) {
+        hint = 'GitHub authentication failed. Please double check that your Personal Access Token is correct and not expired.';
+      } else if (rawStderr.includes('Repository not found') || rawStderr.includes('404')) {
+        hint = `Repository "${cleanOwner}/${cleanRepo}" was not found on GitHub. Please create the repository on GitHub first (or verify the spelling).`;
+      } else if (rawStderr.includes('Permission to') && rawStderr.includes('denied to')) {
+        hint = `Permission denied to repository "${cleanOwner}/${cleanRepo}". Check that your token was generated from account "${cleanOwner}" with "repo" access.`;
+      }
+
       return res.status(400).json({
         success: false,
-        error: 'Git Push Failed. Please ensure the repository exists on GitHub and your token has "repo" permissions.',
+        error: `Git Push Failed: ${hint}`,
         details: safeError,
       });
     }

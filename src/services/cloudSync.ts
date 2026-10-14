@@ -138,20 +138,62 @@ export const computeDataSignature = (data: Partial<CloudWorkspacePayload>): stri
   }
 };
 
+const DELETED_INVOICES_KEY = 'solarcraft_deleted_invoice_ids';
+
+export const getDeletedInvoiceIds = (): Set<string> => {
+  try {
+    if (typeof window !== 'undefined') {
+      const raw = localStorage.getItem(DELETED_INVOICES_KEY);
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) return new Set(arr);
+      }
+    }
+  } catch {}
+  return new Set();
+};
+
+export const markInvoiceAsDeleted = (id: string) => {
+  try {
+    if (typeof window !== 'undefined' && id) {
+      const set = getDeletedInvoiceIds();
+      set.add(id);
+      localStorage.setItem(DELETED_INVOICES_KEY, JSON.stringify(Array.from(set)));
+    }
+  } catch {}
+};
+
+export const unmarkInvoiceAsDeleted = (id: string) => {
+  try {
+    if (typeof window !== 'undefined' && id) {
+      const set = getDeletedInvoiceIds();
+      set.delete(id);
+      localStorage.setItem(DELETED_INVOICES_KEY, JSON.stringify(Array.from(set)));
+    }
+  } catch {}
+};
+
 /**
  * Intelligent Conflict-Free Merge for Invoices:
  * Prevents remote sync from wiping out newer local invoice items, accessories, or payments.
+ * Strictly respects deleted invoices so that deleted records are never resurrected.
  */
 export const mergeInvoicesWithLocal = (localInvs: Invoice[], remoteInvs: Invoice[]): Invoice[] => {
-  if (!remoteInvs || remoteInvs.length === 0) return localInvs;
-  if (!localInvs || localInvs.length === 0) return remoteInvs;
+  const deletedIds = getDeletedInvoiceIds();
+
+  // Strip out any deleted invoices from both sides
+  const cleanLocal = (localInvs || []).filter((i) => !deletedIds.has(i.id));
+  const cleanRemote = (remoteInvs || []).filter((i) => !deletedIds.has(i.id));
+
+  if (!cleanRemote || cleanRemote.length === 0) return cleanLocal;
+  if (!cleanLocal || cleanLocal.length === 0) return cleanRemote;
 
   const invoiceMap = new Map<string, Invoice>();
-  for (const inv of remoteInvs) {
+  for (const inv of cleanRemote) {
     invoiceMap.set(inv.id, inv);
   }
 
-  for (const localInv of localInvs) {
+  for (const localInv of cleanLocal) {
     const remoteInv = invoiceMap.get(localInv.id);
     if (!remoteInv) {
       // Local invoice not yet in remote, keep local
@@ -176,7 +218,7 @@ export const mergeInvoicesWithLocal = (localInvs: Invoice[], remoteInvs: Invoice
     }
   }
 
-  return Array.from(invoiceMap.values());
+  return Array.from(invoiceMap.values()).filter((i) => !deletedIds.has(i.id));
 };
 
 export const setLastAppliedHash = (hash: string) => {
@@ -237,7 +279,8 @@ export async function pushToServerRelay(data: {
   stockMovements: StockMovement[];
 }): Promise<{ success: boolean; revision?: number }> {
   try {
-    const payload: CloudWorkspacePayload = {
+    const deletedIds = getDeletedInvoiceIds();
+    const payload: any = {
       version: 2,
       revision: ++activeLocalRevision,
       updatedAt: new Date().toISOString(),
@@ -245,11 +288,12 @@ export async function pushToServerRelay(data: {
       settings: data.settings,
       products: data.products,
       customers: data.customers,
-      invoices: data.invoices,
+      invoices: (data.invoices || []).filter((i) => !deletedIds.has(i.id)),
       purchaseOrders: data.purchaseOrders,
       expenses: data.expenses,
       suppliers: data.suppliers,
       stockMovements: data.stockMovements,
+      deletedInvoiceIds: Array.from(deletedIds),
     };
 
     const res = await fetch('/api/sync/push', {
@@ -274,7 +318,12 @@ export async function fetchServerState(): Promise<CloudWorkspacePayload | null> 
     const res = await fetch('/api/sync/state');
     if (res.ok) {
       const data = await res.json();
-      return data.workspace as CloudWorkspacePayload;
+      const ws = data.workspace as CloudWorkspacePayload;
+      if (ws && ws.invoices) {
+        const deletedIds = getDeletedInvoiceIds();
+        ws.invoices = ws.invoices.filter((i) => !deletedIds.has(i.id));
+      }
+      return ws;
     }
   } catch {
     // ignore
@@ -354,6 +403,9 @@ export async function pushFullStateToCloud(data: {
 
     try {
       const docRef = doc(db, WORKSPACE_DOC_REF, WORKSPACE_DOC_ID);
+      const deletedIds = getDeletedInvoiceIds();
+      const cleanInvoices = (payloadData.invoices || []).filter((i: Invoice) => !deletedIds.has(i.id));
+
       // Sanitize data by converting to clean JSON so undefined fields (e.g. optional item properties)
       // are stripped out, preventing Firestore "Unsupported field value: undefined" errors
       const sanitizedPayload: CloudWorkspacePayload = JSON.parse(
@@ -364,7 +416,7 @@ export async function pushFullStateToCloud(data: {
           settings: payloadData.settings,
           products: payloadData.products,
           customers: payloadData.customers,
-          invoices: payloadData.invoices,
+          invoices: cleanInvoices,
           purchaseOrders: payloadData.purchaseOrders,
           expenses: payloadData.expenses,
           suppliers: payloadData.suppliers,
@@ -382,7 +434,7 @@ export async function pushFullStateToCloud(data: {
   const now = Date.now();
   const timeSinceLast = now - lastFirestorePushTime;
 
-  // Enforce minimum 2.5s between full Firestore writes to respect Spark plan rate limits
+  // Enforce minimum 2.5s between full Firestore writes to respect Spark plan rate limits unless immediate
   if (immediate || timeSinceLast >= 2500) {
     if (firestorePushTimer) {
       clearTimeout(firestorePushTimer);
@@ -402,6 +454,7 @@ export async function pushFullStateToCloud(data: {
 }
 
 export async function fetchCloudState(): Promise<CloudWorkspacePayload | null> {
+  const deletedIds = getDeletedInvoiceIds();
   // First query Firestore for authoritative cloud data
   try {
     const docRef = doc(db, WORKSPACE_DOC_REF, WORKSPACE_DOC_ID);
@@ -409,6 +462,9 @@ export async function fetchCloudState(): Promise<CloudWorkspacePayload | null> {
     if (snapshot.exists()) {
       const data = snapshot.data() as CloudWorkspacePayload;
       if (data && (data.invoices?.length || data.products?.length || data.customers?.length)) {
+        if (data.invoices) {
+          data.invoices = data.invoices.filter((i) => !deletedIds.has(i.id));
+        }
         // Feed into server memory cache
         pushToServerRelay(data as any).catch(() => {});
         return data;
@@ -421,6 +477,9 @@ export async function fetchCloudState(): Promise<CloudWorkspacePayload | null> {
   // Fallback to server state
   const serverState = await fetchServerState();
   if (serverState && (serverState.invoices?.length || serverState.products?.length)) {
+    if (serverState.invoices) {
+      serverState.invoices = serverState.invoices.filter((i) => !deletedIds.has(i.id));
+    }
     return serverState;
   }
   return null;

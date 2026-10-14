@@ -314,15 +314,8 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
 
     const qtyNum = Number(quantity);
     if (!qtyNum || qtyNum <= 0) {
-      alert('Please enter a valid quantity greater than 0.');
+      setFeedbackMessage({ text: 'Please enter a valid quantity greater than 0.', type: 'error' });
       return;
-    }
-
-    if (activeMode === 'STOCK_OUT' && qtyNum > matchedProduct.stockQty) {
-      const confirmExceed = window.confirm(
-        `Warning: You are deducting ${qtyNum} ${matchedProduct.unit}, but warehouse only shows ${matchedProduct.stockQty} in stock. Proceed with negative stock adjustment?`
-      );
-      if (!confirmExceed) return;
     }
 
     const previousStock = matchedProduct.stockQty;

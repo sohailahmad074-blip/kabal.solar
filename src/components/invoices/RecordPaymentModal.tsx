@@ -103,17 +103,14 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
     receiptType
   );
 
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
     if (amount <= 0 && discount <= 0) {
-      alert('Please enter a payment amount or a settlement discount.');
+      setErrorMessage('Please enter a payment amount or a settlement discount.');
       return;
-    }
-
-    if (totalSettled > invoice.balanceDue) {
-      if (!window.confirm(`Total credit (Payment: ${formatCurrency(amount, settings.currency)} + Discount: ${formatCurrency(discount, settings.currency)}) is greater than the outstanding balance (${formatCurrency(invoice.balanceDue, settings.currency)}). Do you want to proceed?`)) {
-        return;
-      }
     }
 
     onSavePayment(invoice.id, amount, method, referenceNo, notes, discount);
@@ -505,6 +502,12 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
             </div>
           )}
         </div>
+
+        {errorMessage && (
+          <div className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-700 font-medium">
+            {errorMessage}
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex items-center justify-between border-t border-slate-200 pt-3">

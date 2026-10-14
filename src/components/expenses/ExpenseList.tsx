@@ -5,7 +5,9 @@ import {
   Receipt, 
   Trash2, 
   Edit3, 
-  BarChart3
+  BarChart3,
+  AlertCircle,
+  X
 } from 'lucide-react';
 import { Expense, ShopSettings, Invoice } from '../../types/solar';
 import { ProfitLossReport } from './ProfitLossReport';
@@ -29,6 +31,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
   const [viewMode, setViewMode] = useState<'LIST' | 'PNL'>('LIST');
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
+  const [expenseToDelete, setExpenseToDelete] = useState<Expense | null>(null);
 
   const filteredExpenses = expenses.filter((exp) => {
     const matchesSearch =
@@ -237,11 +240,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
 
                             <button
                               type="button"
-                              onClick={() => {
-                                if (window.confirm(`Delete expense "${exp.title}"?`)) {
-                                  onDeleteExpense(exp.id);
-                                }
-                              }}
+                              onClick={() => setExpenseToDelete(exp)}
                               className="rounded p-1 text-rose-500 hover:bg-rose-50"
                               title="Delete Expense"
                             >
@@ -257,6 +256,74 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
             )}
           </div>
         </>
+      )}
+
+      {/* Delete Expense Confirmation Modal */}
+      {expenseToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-4">
+              <div className="rounded-full bg-rose-100 p-3 text-rose-600 shrink-0">
+                <AlertCircle className="h-6 w-6" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Delete Expense?
+                  </h3>
+                  <button
+                    onClick={() => setExpenseToDelete(null)}
+                    className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="mt-3 rounded-xl bg-slate-50 border border-slate-200/80 p-3 text-xs space-y-1.5 text-slate-600">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Title:</span>
+                    <span className="font-semibold text-slate-800">{expenseToDelete.title}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Payee:</span>
+                    <span>{expenseToDelete.payee}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Amount:</span>
+                    <span className="font-bold text-slate-900">
+                      {formatCurrency(expenseToDelete.amount, settings.currency, settings.currencyPosition)}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="mt-3 text-xs text-slate-500 leading-relaxed">
+                  Are you sure you want to delete this expense record? This will update your accounting ledger and P&amp;L reports.
+                </p>
+
+                <div className="mt-6 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setExpenseToDelete(null)}
+                    className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDeleteExpense(expenseToDelete.id);
+                      setExpenseToDelete(null);
+                    }}
+                    className="flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-rose-700 active:scale-95 transition-all"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Yes, Delete Expense
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

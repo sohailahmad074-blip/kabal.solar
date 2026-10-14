@@ -41,7 +41,8 @@ export const GitHubPublishModal: React.FC<GitHubPublishModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const [activeTab, setActiveTab] = useState<'DIRECT' | 'COMMANDS' | 'DOWNLOAD'>('DIRECT');
+  const isVercelHost = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app');
+  const [activeTab, setActiveTab] = useState<'DIRECT' | 'COMMANDS' | 'DOWNLOAD'>(() => (isVercelHost ? 'DOWNLOAD' : 'DIRECT'));
   const [repoOwner, setRepoOwner] = useState('sohailahmad074-blip');
   const [repoName, setRepoName] = useState('kabal-solar');
   const [personalAccessToken, setPersonalAccessToken] = useState(() => {
@@ -174,8 +175,13 @@ export const GitHubPublishModal: React.FC<GitHubPublishModalProps> = ({
 
   const handleDownloadArchive = async (format: 'zip' | 'tar.gz') => {
     setIsDownloading(true);
+    const filename = `solarcraft-erp-latest.${format === 'zip' ? 'zip' : 'tar.gz'}`;
     try {
-      const res = await fetch(`/api/github/download-source?format=${format}`);
+      let res = await fetch(`/api/github/download-source?format=${format}`);
+      if (!res.ok) {
+        // Fallback to static public file (e.g. when hosted on Vercel)
+        res = await fetch(`/${filename}`);
+      }
       if (!res.ok) {
         throw new Error(`Server returned ${res.status}: ${res.statusText}`);
       }
@@ -183,7 +189,7 @@ export const GitHubPublishModal: React.FC<GitHubPublishModalProps> = ({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `solarcraft-erp-latest.${format === 'zip' ? 'zip' : 'tar.gz'}`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       setTimeout(() => {
@@ -191,8 +197,8 @@ export const GitHubPublishModal: React.FC<GitHubPublishModalProps> = ({
         document.body.removeChild(a);
       }, 200);
     } catch (err: any) {
-      console.warn('Direct blob download failed, falling back to window location:', err);
-      window.location.href = `/api/github/download-source?format=${format}`;
+      console.warn('Direct blob download failed, falling back to direct static file:', err);
+      window.location.href = `/${filename}`;
     } finally {
       setIsDownloading(false);
     }
@@ -642,8 +648,21 @@ git push -u origin main`;
               </div>
             </div>
 
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[11px]">
-              💡 <strong>GitHub Web Upload:</strong> If you don&apos;t want to use git or tokens, go to your repository on GitHub (<code>https://github.com/sohailahmad074-blip/kabal-solar</code>), click <em>&quot;Add file&quot; ➔ &quot;Upload files&quot;</em>, extract the zip and drag all files to upload!
+            <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-amber-950 text-xs space-y-2">
+              <div className="font-bold flex items-center gap-1.5 text-amber-900">
+                <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                <span>Important Note on GitHub Web Upload:</span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-amber-900">
+                GitHub&apos;s website (&ldquo;Add file ➔ Upload files&rdquo;) <strong>does not upload subfolders like <code>src/</code></strong> when dragged into a web browser. To update your GitHub repository and trigger Vercel deployment:
+              </p>
+              <ul className="text-[11px] list-disc list-inside space-y-1 text-amber-900 pl-1">
+                <li><strong>Recommended (1-Click):</strong> Switch to the <strong>&ldquo;1-Click Deploy&rdquo;</strong> tab in this modal inside your AI Studio workspace with a GitHub Personal Access Token.</li>
+                <li><strong>Using GitHub Desktop:</strong> Clone your repo <code>sohailahmad074-blip/kabal-solar</code>, extract the ZIP into that folder, and click <em>Commit & Push</em>.</li>
+                <li><strong>Using Git Bash / Terminal:</strong> Extract the ZIP, open terminal in that folder, and run:
+                  <code className="block mt-1 p-1.5 bg-amber-100 rounded font-mono text-[10px] select-all">git init && git add -A && git commit -m &quot;update&quot; && git branch -M main && git remote add origin https://github.com/sohailahmad074-blip/kabal-solar.git && git push -u origin main --force</code>
+                </li>
+              </ul>
             </div>
           </div>
         )}

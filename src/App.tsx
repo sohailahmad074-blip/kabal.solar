@@ -77,7 +77,8 @@ import {
   broadcastLocalState,
   computeDataSignature,
   setLastAppliedHash,
-  mergeInvoicesWithLocal
+  mergeInvoicesWithLocal,
+  markInvoiceAsDeleted
 } from './services/cloudSync';
 import { reconcileCustomersAndInvoices } from './utils/reconciliation';
 
@@ -267,6 +268,13 @@ export function App() {
   const [livePingToast, setLivePingToast] = useState<{ fromDevice: string; message: string } | null>(null);
   const isInitialCloudSyncRef = useRef(true);
   const lastSyncedSignatureRef = useRef<string>('');
+  const invoicesRef = useRef(invoices);
+  const customersRef = useRef(customers);
+
+  useEffect(() => {
+    invoicesRef.current = invoices;
+    customersRef.current = customers;
+  }, [invoices, customers]);
 
   // Subscribe to High-Speed Server Live Stream + Cloud Database for continuous 1-second sync
   useEffect(() => {
@@ -282,9 +290,9 @@ export function App() {
         if (cloudData.products) setProducts(cloudData.products);
         if (cloudData.customers || cloudData.invoices) {
           const mergedInvs = cloudData.invoices
-            ? mergeInvoicesWithLocal(invoices, cloudData.invoices)
-            : invoices;
-          const incomingCusts = cloudData.customers || customers;
+            ? mergeInvoicesWithLocal(invoicesRef.current, cloudData.invoices)
+            : invoicesRef.current;
+          const incomingCusts = cloudData.customers || customersRef.current;
           const rec = reconcileCustomersAndInvoices(incomingCusts, mergedInvs);
           setCustomers(rec.reconciledCustomers);
           setInvoices(rec.reconciledInvoices);
@@ -672,6 +680,9 @@ export function App() {
   };
 
   const handleDeleteInvoice = (id: string) => {
+    // 1. Mark invoice as deleted permanently so real-time sync never resurrects it
+    markInvoiceAsDeleted(id);
+
     const invToDelete = invoices.find((i) => i.id === id);
     let updatedInvoices = invoices.filter((i) => i.id !== id);
 
@@ -755,8 +766,13 @@ export function App() {
     setLastAppliedHash(newSig);
 
     broadcastLocalState(payload);
+
+    // Call server DELETE route immediately
+    fetch(`/api/invoices/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+
+    // Push updated state to server relay and immediate cloud push to Firestore
     pushToServerRelay(payload).catch(() => {});
-    pushFullStateToCloud(payload).catch(() => {});
+    pushFullStateToCloud(payload, true).catch(() => {});
 
     if (printingInvoice?.id === id) {
       setPrintingInvoice(null);
@@ -990,33 +1006,31 @@ export function App() {
   };
 
   const handleDeleteCustomer = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this customer?')) {
-      const nextCusts = customers.filter((c) => c.id !== id);
-      const rec = reconcileCustomersAndInvoices(nextCusts, invoices);
-      setCustomers(rec.reconciledCustomers);
-      setInvoices(rec.reconciledInvoices);
-      saveCustomers(rec.reconciledCustomers);
-      saveInvoices(rec.reconciledInvoices);
+    const nextCusts = customers.filter((c) => c.id !== id);
+    const rec = reconcileCustomersAndInvoices(nextCusts, invoices);
+    setCustomers(rec.reconciledCustomers);
+    setInvoices(rec.reconciledInvoices);
+    saveCustomers(rec.reconciledCustomers);
+    saveInvoices(rec.reconciledInvoices);
 
-      const payload = {
-        settings,
-        products,
-        customers: rec.reconciledCustomers,
-        invoices: rec.reconciledInvoices,
-        purchaseOrders,
-        expenses,
-        suppliers,
-        stockMovements,
-      };
+    const payload = {
+      settings,
+      products,
+      customers: rec.reconciledCustomers,
+      invoices: rec.reconciledInvoices,
+      purchaseOrders,
+      expenses,
+      suppliers,
+      stockMovements,
+    };
 
-      const newSig = computeDataSignature(payload);
-      lastSyncedSignatureRef.current = newSig;
-      setLastAppliedHash(newSig);
+    const newSig = computeDataSignature(payload);
+    lastSyncedSignatureRef.current = newSig;
+    setLastAppliedHash(newSig);
 
-      broadcastLocalState(payload);
-      pushToServerRelay(payload).catch(() => {});
-      pushFullStateToCloud(payload).catch(() => {});
-    }
+    broadcastLocalState(payload);
+    pushToServerRelay(payload).catch(() => {});
+    pushFullStateToCloud(payload, true).catch(() => {});
   };
 
   // --- EXPENSE HANDLERS ---

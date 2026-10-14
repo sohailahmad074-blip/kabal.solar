@@ -9,7 +9,9 @@ import {
   Trash2, 
   Edit3,
   PackageCheck,
-  Users
+  Users,
+  AlertCircle,
+  X
 } from 'lucide-react';
 import { PurchaseOrder, Supplier, ShopSettings, ProductItem } from '../../types/solar';
 import { Badge } from '../common/Badge';
@@ -38,6 +40,7 @@ export const PurchasingList: React.FC<PurchasingListProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<'ORDERS' | 'SUPPLIERS'>('ORDERS');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [poToDelete, setPoToDelete] = useState<PurchaseOrder | null>(null);
 
   const filteredPOs = purchaseOrders.filter((po) => {
     const matchesSearch =
@@ -262,11 +265,7 @@ export const PurchasingList: React.FC<PurchasingListProps> = ({
 
                           <button
                             type="button"
-                            onClick={() => {
-                              if (window.confirm(`Delete PO ${po.poNumber}?`)) {
-                                onDeletePO(po.id);
-                              }
-                            }}
+                            onClick={() => setPoToDelete(po)}
                             className="rounded p-1 text-rose-500 hover:bg-rose-50"
                             title="Delete PO"
                           >
@@ -327,6 +326,74 @@ export const PurchasingList: React.FC<PurchasingListProps> = ({
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Delete PO Confirmation Modal */}
+      {poToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-4">
+              <div className="rounded-full bg-rose-100 p-3 text-rose-600 shrink-0">
+                <AlertCircle className="h-6 w-6" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Delete PO #{poToDelete.poNumber}?
+                  </h3>
+                  <button
+                    onClick={() => setPoToDelete(null)}
+                    className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="mt-3 rounded-xl bg-slate-50 border border-slate-200/80 p-3 text-xs space-y-1.5 text-slate-600">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Supplier:</span>
+                    <span className="font-semibold text-slate-800">{poToDelete.supplierName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Order Date:</span>
+                    <span>{formatDate(poToDelete.orderDate)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Total Amount:</span>
+                    <span className="font-bold text-slate-900">
+                      {formatCurrency(poToDelete.grandTotal, settings.currency, settings.currencyPosition)}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="mt-3 text-xs text-slate-500 leading-relaxed">
+                  Are you sure you want to remove purchase order #{poToDelete.poNumber}? This record will be permanently deleted from your procurement ledger.
+                </p>
+
+                <div className="mt-6 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPoToDelete(null)}
+                    className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDeletePO(poToDelete.id);
+                      setPoToDelete(null);
+                    }}
+                    className="flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-rose-700 active:scale-95 transition-all"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Yes, Delete PO
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
