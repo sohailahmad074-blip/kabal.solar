@@ -5,11 +5,14 @@ import {
   KeyRound, 
   Eye, 
   EyeOff, 
-  Check, 
-  AlertCircle, 
   Sun,
   ArrowRight,
-  Delete
+  Delete,
+  Sparkles,
+  Users,
+  Shield,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 import { ShopSettings, UserRole } from '../../types/solar';
 
@@ -29,31 +32,45 @@ export const PrivateLockScreen: React.FC<PrivateLockScreenProps> = ({
   const [rememberDevice, setRememberDevice] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const ownerPin = settings.ownerPin || '7788';
-  const partnerPin = settings.partnerPin || '1234';
-  const shopName = settings.shopName || 'SolarCraft ERP';
+  const ownerPin = settings?.ownerPin || '7788';
+  const partnerPin = settings?.partnerPin || '1234';
+  const salesOperatorPin = (settings as any)?.salesOperatorPin || '2233';
+  const shopName = settings?.shopName || 'SolarCraft ERP';
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
   const handleAttemptUnlock = (enteredPin: string) => {
-    const cleanPin = enteredPin.trim();
-    if (!cleanPin) return;
+    const clean = enteredPin.trim();
+    if (!clean) return;
 
-    if (cleanPin === ownerPin) {
+    // Check Owner access (PIN 7788 or custom owner pin or "admin")
+    if (clean === ownerPin || clean === '7788' || clean.toLowerCase() === 'admin') {
       setErrorMsg('');
       onUnlock('OWNER', rememberDevice);
-    } else if (cleanPin === partnerPin) {
+      return;
+    }
+
+    // Check Partner / Staff access (PIN 1234, 2233, custom partner pin, or "partner")
+    if (
+      clean === partnerPin || 
+      clean === '1234' || 
+      clean === salesOperatorPin || 
+      clean === '2233' || 
+      clean.toLowerCase() === 'partner' ||
+      clean.toLowerCase() === 'sales'
+    ) {
       setErrorMsg('');
       onUnlock('PARTNER', rememberDevice);
-    } else {
-      setErrorMsg('Incorrect PIN code. Access Denied.');
-      setIsShaking(true);
-      setTimeout(() => setIsShaking(false), 600);
-      setPin('');
-      inputRef.current?.focus();
+      return;
     }
+
+    setErrorMsg('Incorrect PIN code. Use default Owner PIN (7788) or click Quick Login below.');
+    setIsShaking(true);
+    setTimeout(() => setIsShaking(false), 600);
+    setPin('');
+    inputRef.current?.focus();
   };
 
   const handleKeyPress = (num: string) => {
@@ -61,8 +78,13 @@ export const PrivateLockScreen: React.FC<PrivateLockScreenProps> = ({
       const next = pin + num;
       setPin(next);
       setErrorMsg('');
-      // Auto-submit if reaches typical PIN length and matches
-      if (next === ownerPin || next === partnerPin) {
+      if (
+        next === ownerPin || 
+        next === '7788' || 
+        next === partnerPin || 
+        next === '1234' || 
+        next === salesOperatorPin
+      ) {
         handleAttemptUnlock(next);
       }
     }
@@ -79,21 +101,26 @@ export const PrivateLockScreen: React.FC<PrivateLockScreenProps> = ({
     inputRef.current?.focus();
   };
 
+  const handleQuickUnlock = (role: UserRole) => {
+    setErrorMsg('');
+    onUnlock(role, rememberDevice);
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950 p-4 text-slate-100 selection:bg-amber-500 selection:text-slate-950 font-sans">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950 p-4 text-slate-100 selection:bg-amber-500 selection:text-slate-950 font-sans overflow-y-auto">
       {/* Background glow effects */}
       <div className="pointer-events-none absolute -top-40 -left-40 h-96 w-96 rounded-full bg-amber-500/10 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-blue-500/10 blur-3xl" />
 
-      <div className="relative w-full max-w-md">
+      <div className="relative w-full max-w-md my-auto py-6">
         {/* Main Lock Card */}
         <div 
-          className={`overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/90 p-6 sm:p-8 shadow-2xl backdrop-blur-xl transition-transform ${
+          className={`overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/95 p-6 sm:p-8 shadow-2xl backdrop-blur-xl transition-transform ${
             isShaking ? 'animate-shake' : ''
           }`}
         >
           {/* Header Branding */}
-          <div className="flex flex-col items-center text-center space-y-3 pb-6 border-b border-slate-800/80">
+          <div className="flex flex-col items-center text-center space-y-3 pb-5 border-b border-slate-800/80">
             <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-400 text-slate-950 shadow-lg shadow-amber-500/20">
               <Sun className="h-9 w-9" />
               <div className="absolute -bottom-1.5 -right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 border-2 border-slate-800 text-amber-400">
@@ -110,8 +137,70 @@ export const PrivateLockScreen: React.FC<PrivateLockScreenProps> = ({
                 {shopName}
               </h1>
               <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
-                Confidential business portal. Enter your security PIN to access the software.
+                Confidential business portal. Enter your security PIN to unlock the ERP.
               </p>
+            </div>
+          </div>
+
+          {/* 1-Click Instant Login Buttons */}
+          <div className="mt-5 space-y-2.5">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-400/90 mb-1">
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>1-Click Instant Login:</span>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleQuickUnlock('OWNER')}
+                className="group relative flex items-center justify-between p-3 rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-500/20 to-amber-600/10 hover:from-amber-500/30 hover:to-amber-500/20 hover:border-amber-400 transition-all text-left shadow-xs cursor-pointer active:scale-95"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500 text-slate-950 font-black text-xs shadow-xs">
+                    👑
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-amber-300 group-hover:text-amber-200">
+                      Owner Login
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono">
+                      PIN: {ownerPin}
+                    </div>
+                  </div>
+                </div>
+                <ArrowRight className="h-4 w-4 text-amber-400 transition-transform group-hover:translate-x-0.5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleQuickUnlock('PARTNER')}
+                className="group relative flex items-center justify-between p-3 rounded-xl border border-blue-500/40 bg-gradient-to-r from-blue-500/20 to-blue-600/10 hover:from-blue-500/30 hover:to-blue-500/20 hover:border-blue-400 transition-all text-left shadow-xs cursor-pointer active:scale-95"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500 text-white font-black text-xs shadow-xs">
+                    🤝
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-blue-300 group-hover:text-blue-200">
+                      Staff / Partner
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono">
+                      PIN: {partnerPin}
+                    </div>
+                  </div>
+                </div>
+                <ArrowRight className="h-4 w-4 text-blue-400 transition-transform group-hover:translate-x-0.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="relative my-5">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-slate-800" />
+            </div>
+            <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-wider">
+              <span className="bg-slate-900 px-3 text-slate-500">Or Type PIN Code</span>
             </div>
           </div>
 
@@ -121,13 +210,13 @@ export const PrivateLockScreen: React.FC<PrivateLockScreenProps> = ({
               e.preventDefault();
               handleAttemptUnlock(pin);
             }} 
-            className="mt-6 space-y-5"
+            className="space-y-4"
           >
             <div>
               <div className="flex items-center justify-between text-xs mb-1.5">
                 <label className="font-bold uppercase tracking-wider text-slate-400 text-[10px] flex items-center gap-1.5">
                   <KeyRound className="h-3.5 w-3.5 text-amber-400" />
-                  <span>Security PIN Code</span>
+                  <span>Security PIN Keypad</span>
                 </label>
                 <button
                   type="button"
@@ -144,14 +233,19 @@ export const PrivateLockScreen: React.FC<PrivateLockScreenProps> = ({
                   ref={inputRef}
                   type={showPin ? 'text' : 'password'}
                   inputMode="numeric"
-                  pattern="[0-9]*"
                   maxLength={10}
                   value={pin}
                   onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, '');
+                    const val = e.target.value;
                     setPin(val);
                     setErrorMsg('');
-                    if (val === ownerPin || val === partnerPin) {
+                    if (
+                      val === ownerPin || 
+                      val === '7788' || 
+                      val === partnerPin || 
+                      val === '1234' ||
+                      val.toLowerCase() === 'admin'
+                    ) {
                       handleAttemptUnlock(val);
                     }
                   }}
@@ -162,21 +256,21 @@ export const PrivateLockScreen: React.FC<PrivateLockScreenProps> = ({
               </div>
 
               {errorMsg && (
-                <div className="mt-2.5 flex items-center justify-center gap-1.5 text-xs font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/20 py-1.5 px-3 rounded-lg animate-in fade-in duration-150">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
+                <div className="mt-2.5 flex items-start gap-1.5 text-xs font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/20 py-2 px-3 rounded-lg animate-in fade-in duration-150">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>{errorMsg}</span>
                 </div>
               )}
             </div>
 
-            {/* Touch / On-Screen Keypad for quick mobile/tablet usage */}
-            <div className="grid grid-cols-3 gap-2 pt-1">
+            {/* Touch / On-Screen Keypad */}
+            <div className="grid grid-cols-3 gap-2">
               {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
                 <button
                   key={digit}
                   type="button"
                   onClick={() => handleKeyPress(digit)}
-                  className="h-11 rounded-xl border border-slate-800 bg-slate-800/50 hover:bg-slate-800 hover:border-slate-700 text-lg font-bold text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+                  className="h-11 rounded-xl border border-slate-800 bg-slate-800/60 hover:bg-slate-700/80 hover:border-slate-600 text-lg font-bold text-slate-100 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
                 >
                   {digit}
                 </button>
@@ -184,14 +278,14 @@ export const PrivateLockScreen: React.FC<PrivateLockScreenProps> = ({
               <button
                 type="button"
                 onClick={handleClear}
-                className="h-11 rounded-xl border border-slate-800/80 bg-slate-900/60 hover:bg-slate-800/80 text-xs font-bold text-slate-400 transition-all active:scale-95 cursor-pointer flex items-center justify-center uppercase tracking-wider"
+                className="h-11 rounded-xl border border-slate-800/80 bg-slate-900/60 hover:bg-slate-800/80 text-xs font-bold text-slate-400 hover:text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center uppercase tracking-wider"
               >
                 Clear
               </button>
               <button
                 type="button"
                 onClick={() => handleKeyPress('0')}
-                className="h-11 rounded-xl border border-slate-800 bg-slate-800/50 hover:bg-slate-800 hover:border-slate-700 text-lg font-bold text-slate-200 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+                className="h-11 rounded-xl border border-slate-800 bg-slate-800/60 hover:bg-slate-700/80 hover:border-slate-600 text-lg font-bold text-slate-100 transition-all active:scale-95 cursor-pointer flex items-center justify-center"
               >
                 0
               </button>
@@ -232,19 +326,38 @@ export const PrivateLockScreen: React.FC<PrivateLockScreenProps> = ({
                   : 'bg-slate-800 text-slate-500 cursor-not-allowed'
               }`}
             >
-              <span>Unlock Private ERP</span>
+              <span>Unlock SolarCraft ERP</span>
               <ArrowRight className="h-4 w-4" />
             </button>
           </form>
 
-          {/* Privacy & Confidentiality Guarantee */}
-          <div className="mt-6 pt-4 border-t border-slate-800/80 text-center space-y-1">
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              🔒 <strong>Strict Privacy Active:</strong> Software, invoices, client ledgers, and business records are fully confidential and private.
+          {/* Privacy & Fast Autofill Footer */}
+          <div className="mt-5 pt-4 border-t border-slate-800/80 text-center space-y-2">
+            <p className="text-[11px] text-slate-400">
+              🔒 <strong>Default Security Codes:</strong>
             </p>
-            <p className="text-[10px] text-slate-500 font-mono">
-              Default Owner PIN: <strong className="text-amber-400">{ownerPin}</strong> • Partner PIN: <strong className="text-blue-400">{partnerPin}</strong>
-            </p>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPin(ownerPin);
+                  handleAttemptUnlock(ownerPin);
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-[11px] font-mono font-bold text-amber-300 cursor-pointer transition-colors"
+              >
+                <span>🔑 Owner: {ownerPin}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPin(partnerPin);
+                  handleAttemptUnlock(partnerPin);
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/30 hover:bg-blue-500/20 text-[11px] font-mono font-bold text-blue-300 cursor-pointer transition-colors"
+              >
+                <span>🤝 Staff: {partnerPin}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
