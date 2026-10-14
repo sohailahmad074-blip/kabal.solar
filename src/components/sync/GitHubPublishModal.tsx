@@ -418,35 +418,46 @@ git push -u origin main`;
                   <Key className="h-3.5 w-3.5 text-amber-500" />
                   <span>GitHub Personal Access Token (PAT)</span>
                 </label>
-                <a
-                  href="https://github.com/settings/tokens/new?scopes=repo&description=SolarCraft+ERP+Deploy"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 text-[11px] bg-blue-50 px-2 py-0.5 rounded border border-blue-200 hover:bg-blue-100 transition-colors"
-                >
-                  <span>1. Open GitHub Token Page</span>
-                  <ExternalLink className="h-3 w-3" />
-                </a>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <a
+                    href="https://github.com/settings/tokens/new?scopes=repo&description=SolarCraft+ERP+Deploy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-emerald-700 hover:text-emerald-900 font-bold flex items-center gap-1 text-[11px] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-300 hover:bg-emerald-100 transition-colors"
+                  >
+                    <span>1. Classic Token (Recommended - 1 Click)</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                  <a
+                    href="https://github.com/settings/personal-access-tokens/new"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 text-[10px] bg-slate-50 px-2 py-0.5 rounded border border-slate-200 hover:bg-slate-100 transition-colors"
+                  >
+                    <span>Fine-grained Token</span>
+                    <ExternalLink className="h-2.5 w-2.5" />
+                  </a>
+                </div>
               </div>
 
-              {/* Step-by-step guide for generating the token on GitHub */}
+              {/* Step-by-step guide for generating Classic Token on GitHub */}
               <div className="mb-2 p-3 bg-amber-50/80 border border-amber-200 rounded-lg text-[11px] text-amber-900 space-y-2">
                 <div className="font-bold text-amber-950 flex items-center gap-1.5">
                   <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
-                  <span>Seeing the "New personal access token (classic)" page on GitHub?</span>
+                  <span>How to generate your token in 10 seconds on GitHub:</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
                   <div className="bg-white p-2 rounded border border-amber-200/80">
-                    <div className="font-bold text-slate-800 text-[10px] uppercase tracking-wider text-amber-700">Step 1</div>
-                    <p className="mt-0.5 text-slate-700">Scroll down to the <strong>very bottom</strong> of that GitHub page.</p>
+                    <div className="font-bold text-slate-800 text-[10px] uppercase tracking-wider text-amber-700">Option A (Fastest)</div>
+                    <p className="mt-0.5 text-slate-700">Open <strong>Classic Token</strong> above (the <strong>repo</strong> checkbox is already checked). Scroll to the bottom and click <strong className="text-emerald-700">"Generate token"</strong>.</p>
                   </div>
                   <div className="bg-white p-2 rounded border border-amber-200/80">
-                    <div className="font-bold text-slate-800 text-[10px] uppercase tracking-wider text-amber-700">Step 2</div>
-                    <p className="mt-0.5 text-slate-700">Click the green button: <strong className="text-emerald-700">"Generate token"</strong>.</p>
+                    <div className="font-bold text-slate-800 text-[10px] uppercase tracking-wider text-amber-700">Option B (Fine-Grained)</div>
+                    <p className="mt-0.5 text-slate-700">If using Fine-grained: Under <em>Repository access</em> choose <strong>All repositories</strong>. Under <em>Permissions ➔ Repository</em> set <strong>Contents: Read and write</strong>.</p>
                   </div>
                   <div className="bg-white p-2 rounded border border-amber-200/80">
-                    <div className="font-bold text-slate-800 text-[10px] uppercase tracking-wider text-amber-700">Step 3</div>
-                    <p className="mt-0.5 text-slate-700">Copy the code starting with <strong className="font-mono text-emerald-800">ghp_...</strong> and paste it below.</p>
+                    <div className="font-bold text-slate-800 text-[10px] uppercase tracking-wider text-amber-700">Copy & Paste</div>
+                    <p className="mt-0.5 text-slate-700">Copy your generated token (<strong className="font-mono text-emerald-800">ghp_...</strong> or <strong className="font-mono text-blue-800">github_pat_...</strong>) and paste below.</p>
                   </div>
                 </div>
               </div>
@@ -456,7 +467,7 @@ git push -u origin main`;
                   type={showToken ? 'text' : 'password'}
                   value={personalAccessToken}
                   onChange={(e) => setPersonalAccessToken(e.target.value)}
-                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx or github_pat_..."
                   className="w-full pl-3 pr-16 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-slate-900 font-mono text-xs"
                 />
                 <button
@@ -467,6 +478,25 @@ git push -u origin main`;
                   {showToken ? 'Hide' : 'Show'}
                 </button>
               </div>
+
+              {personalAccessToken.trim().startsWith('github_pat_') && (
+                <div className="mt-2 p-3 bg-blue-50 border border-blue-300 rounded-xl text-[11px] text-blue-950 space-y-1.5 animate-in fade-in duration-150">
+                  <div className="font-bold flex items-center gap-1.5 text-blue-900">
+                    <AlertCircle className="h-4 w-4 text-blue-600" />
+                    <span>Fine-Grained Token Detected (github_pat_...)</span>
+                  </div>
+                  <p className="text-blue-900">
+                    If this token gets <strong className="text-rose-700">"403 Permission Denied"</strong>, it means GitHub did not grant it write permissions to repository <code>{repoName || 'kabal-solar'}</code>.
+                  </p>
+                  <div className="bg-white p-2 rounded-lg border border-blue-200 space-y-1 text-slate-800">
+                    <div>1. <strong>Repository access:</strong> Must select <em>"All repositories"</em> or select <em>"{repoName || 'kabal-solar'}"</em>.</div>
+                    <div>2. <strong>Repository permissions:</strong> Click <em>"Permissions" ➔ "Repository permissions"</em> ➔ set <strong className="text-emerald-700">"Contents"</strong> to <strong className="text-emerald-700">"Read and write"</strong> (default is No access).</div>
+                  </div>
+                  <p className="text-[10px] text-blue-800 pt-0.5">
+                    💡 <em>Fastest Fix: Click <strong>"1. Classic Token (Recommended)"</strong> above, where "repo" access is pre-checked by default!</em>
+                  </p>
+                </div>
+              )}
 
               <div className="mt-2 flex items-center justify-between text-[11px]">
                 <label className="flex items-center gap-1.5 cursor-pointer text-slate-600 font-medium">

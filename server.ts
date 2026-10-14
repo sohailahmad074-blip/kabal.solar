@@ -370,54 +370,73 @@ app.post('/api/github/publish', async (req: Request, res: Response) => {
       await execFileAsync('git', ['branch', '-M', 'main'], { cwd: __dirname });
     } catch {}
 
-    // 6. Set remote origin URL
-    let authenticatedUrl: string;
+    // 6. Set remote origin URL candidate formats to try
+    const urlCandidates: string[] = [];
     if (!token) {
-      authenticatedUrl = `https://github.com/${cleanOwner}/${cleanRepo}.git`;
+      urlCandidates.push(`https://github.com/${cleanOwner}/${cleanRepo}.git`);
     } else if (token.startsWith('github_pat_')) {
-      authenticatedUrl = `https://x-access-token:${encodeURIComponent(token)}@github.com/${cleanOwner}/${cleanRepo}.git`;
+      urlCandidates.push(`https://x-access-token:${encodeURIComponent(token)}@github.com/${cleanOwner}/${cleanRepo}.git`);
+      urlCandidates.push(`https://oauth2:${encodeURIComponent(token)}@github.com/${cleanOwner}/${cleanRepo}.git`);
+      urlCandidates.push(`https://${encodeURIComponent(token)}@github.com/${cleanOwner}/${cleanRepo}.git`);
     } else {
-      authenticatedUrl = `https://${encodeURIComponent(cleanOwner)}:${encodeURIComponent(token)}@github.com/${cleanOwner}/${cleanRepo}.git`;
+      urlCandidates.push(`https://${encodeURIComponent(cleanOwner)}:${encodeURIComponent(token)}@github.com/${cleanOwner}/${cleanRepo}.git`);
+      urlCandidates.push(`https://${encodeURIComponent(token)}@github.com/${cleanOwner}/${cleanRepo}.git`);
+      urlCandidates.push(`https://oauth2:${encodeURIComponent(token)}@github.com/${cleanOwner}/${cleanRepo}.git`);
     }
 
-    try {
-      await execFileAsync('git', ['remote', 'remove', 'origin'], { cwd: __dirname });
-    } catch {
-      // origin might not exist yet
+    let lastError: any = null;
+    let pushSuccess = false;
+    let pushStdout = '';
+    let pushStderr = '';
+
+    for (const testUrl of urlCandidates) {
+      try {
+        try {
+          await execFileAsync('git', ['remote', 'remove', 'origin'], { cwd: __dirname });
+        } catch {}
+
+        await execFileAsync('git', ['remote', 'add', 'origin', testUrl], { cwd: __dirname });
+        const { stdout, stderr } = await execFileAsync('git', ['push', '-u', 'origin', 'main', '--force'], { cwd: __dirname });
+        pushSuccess = true;
+        pushStdout = stdout;
+        pushStderr = stderr;
+        break;
+      } catch (err: any) {
+        lastError = err;
+      }
     }
 
-    await execFileAsync('git', ['remote', 'add', 'origin', authenticatedUrl], { cwd: __dirname });
-
-    // Push to GitHub
-    try {
-      const { stdout, stderr } = await execFileAsync('git', ['push', '-u', 'origin', 'main', '--force'], { cwd: __dirname });
-      
+    if (pushSuccess) {
       const repoUrl = `https://github.com/${cleanOwner}/${cleanRepo}`;
       const pagesUrl = `https://${cleanOwner.toLowerCase()}.github.io/${cleanRepo}/`;
 
       // Get latest commit hash
       const { stdout: logOut } = await execFileAsync('git', ['log', '-1', '--format=%H'], { cwd: __dirname });
 
-      res.json({
+      return res.json({
         success: true,
         repoUrl,
         pagesUrl,
         branch: 'main',
         commitHash: logOut.trim(),
         message: 'Successfully deployed and pushed to GitHub!',
-        output: (stdout + ' ' + stderr).replace(new RegExp(token, 'g'), '***'),
+        output: (pushStdout + ' ' + pushStderr).replace(new RegExp(token, 'g'), '***'),
       });
-    } catch (pushErr: any) {
-      const rawStderr = String(pushErr.stderr || pushErr.message || '');
+    } else {
+      const rawStderr = String(lastError?.stderr || lastError?.message || '');
       const safeError = rawStderr.replace(new RegExp(token, 'g'), '***');
-      
+
       let hint = 'Please check that the repository exists on GitHub and your token has "repo" permissions.';
       if (rawStderr.includes('Authentication failed') || rawStderr.includes('Invalid username or password') || rawStderr.includes('401')) {
         hint = 'GitHub authentication failed. Please double check that your Personal Access Token is correct and not expired.';
       } else if (rawStderr.includes('Repository not found') || rawStderr.includes('404')) {
-        hint = `Repository "${cleanOwner}/${cleanRepo}" was not found on GitHub. Please create the repository on GitHub first (or verify the spelling).`;
+        hint = `Repository "${cleanOwner}/${cleanRepo}" was not found on GitHub. Please verify the repository exists under account "${cleanOwner}".`;
       } else if (rawStderr.includes('Permission to') && rawStderr.includes('denied to')) {
-        hint = `Permission denied to repository "${cleanOwner}/${cleanRepo}". Check that your token was generated from account "${cleanOwner}" with "repo" access.`;
+        if (token.startsWith('github_pat_')) {
+          hint = `Permission denied for Fine-Grained token (github_pat_...). On GitHub, edit this token and check: 1) Under "Repository access", choose "All repositories" or select "${cleanRepo}". 2) Under "Permissions" ➔ "Repository permissions", set "Contents" to "Read and write". (Alternatively, generate a Classic Token with "repo" checked for effortless access).`;
+        } else {
+          hint = `Permission denied to repository "${cleanOwner}/${cleanRepo}". Check that your token was generated from account "${cleanOwner}" with the "repo" scope checked.`;
+        }
       }
 
       return res.status(400).json({
